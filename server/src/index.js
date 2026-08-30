@@ -15,7 +15,7 @@ import { logger } from './logger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const PORT = process.env.PORT || 3001
+const PORT = process.env.PORT || 80
 const HOST = process.env.HOST || '0.0.0.0'
 
 // Resolve DB_PATH relative to the project root so relative paths in .env work correctly
