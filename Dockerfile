@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Build tools required to compile better-sqlite3 native bindings
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ \
+    python3 make g++ git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy manifest first for layer caching
@@ -27,7 +27,7 @@ WORKDIR /app
 
 # Build tools required to compile better-sqlite3 native bindings
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ \
+    python3 make g++ git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package.json yarn.lock ./
@@ -39,7 +39,7 @@ FROM node:22-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
+    curl git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=deps /app/node_modules ./node_modules
