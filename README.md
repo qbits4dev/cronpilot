@@ -1,6 +1,5 @@
 ## CronPilot - Set it, Forget it, Stop fucking around in crontab
 
-
 <p align="center">
   <a href="https://cronpilot.orange-coding.net/">Website</a>
 </p>
@@ -41,7 +40,7 @@ The easiest way to run CronPilot is with Docker:
 ```bash
 docker run -d \
   --name cronpilot \
-  -p 3001:3001 \
+  -p 80:80 \
   -v $(pwd)/db:/data \
   ghcr.io/orangecoding/cronpilot:latest
 ```
@@ -52,7 +51,7 @@ Or with docker compose - copy `docker-compose.yml` from this repo and run:
 docker compose up -d
 ```
 
-The database is stored in the `/data` volume. Open [http://localhost:3001](http://localhost:3001) in your browser.
+The database is stored in the `/data` volume. Open [http://localhost:80](http://localhost:80) in your browser.
 
 ### Configuration
 
@@ -96,8 +95,8 @@ cp .env.example .env
 Available options:
 
 | Variable | Default | Description |
-|---|---|---|
-| `PORT` | `3001` | Port for the HTTP server |
+| --- | --- | --- |
+| `PORT` | `80` | Port for the HTTP server |
 | `HOST` | `localhost` | Host to bind the server to |
 | `DB_PATH` | `./cronpilot.db` | Path to the SQLite database file |
 | `EXEC_TIMEOUT_MS` | `1800000` | Max execution time per job in milliseconds (30 min) |
@@ -134,7 +133,7 @@ GATEWAY_TOKEN=a3f8c2d1e9b4...
 Append `?token=YOUR_TOKEN` to the URL when opening CronPilot in your browser:
 
 ```
-http://localhost:3001?token=YOUR_TOKEN
+http://localhost:80?token=YOUR_TOKEN
 ```
 
 If the token is missing or incorrect, you will see an access denied page. If `GATEWAY_TOKEN` is not set, no authentication is required and the app is accessible to anyone who can reach the server.
@@ -146,7 +145,7 @@ Pass the token as an environment variable:
 ```bash
 docker run -d \
   --name cronpilot \
-  -p 3001:3001 \
+  -p 80:80 \
   -v $(pwd)/db:/data \
   -e GATEWAY_TOKEN=your_token_here \
   ghcr.io/orangecoding/cronpilot:latest
@@ -165,8 +164,8 @@ yarn dev
 Or start them individually:
 
 ```bash
-yarn dev:server   # Node.js server on port 3001
-yarn dev:client   # Vite dev server (proxies /api to port 3001)
+yarn dev:server   # Node.js server on port 80
+yarn dev:client   # Vite dev server (proxies /api to port 80)
 ```
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
@@ -207,7 +206,7 @@ yarn build    # Builds the React app into client/dist/
 yarn start    # Starts the server, which serves the built client
 ```
 
-Open [http://localhost:3001](http://localhost:3001) in your browser.
+Open [http://localhost:80](http://localhost:80) in your browser.
 
 ---
 

@@ -54,10 +54,10 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     DB_PATH=/data/cronpilot.db
 
-EXPOSE 3001
+EXPOSE 80
 VOLUME /data
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:3001/ || exit 1
+    CMD curl -f http://localhost:80/ || exit 1
 
 CMD ["node", "server/src/index.js"]
