@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Build tools required to compile better-sqlite3 native bindings
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ git \
+    python3 make g++ git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy manifest first for layer caching
@@ -20,6 +20,9 @@ COPY vite.config.js ./
 
 RUN yarn build
 
+# Clone helper data repo at build time (fixes CA issues by installing ca-certificates above)
+RUN git clone --depth 1 https://github.com/qbits4dev/data.git /external || true
+
 # ---- Production deps stage ----
 FROM node:22-slim AS deps
 
@@ -27,7 +30,7 @@ WORKDIR /app
 
 # Build tools required to compile better-sqlite3 native bindings
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ git \
+    python3 make g++ git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package.json yarn.lock ./
@@ -39,11 +42,12 @@ FROM node:22-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl git \
+    curl git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/client/dist ./client/dist
+COPY --from=builder /external ./external
 COPY server/src ./server/src
 COPY package.json ./
 
