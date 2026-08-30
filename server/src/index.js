@@ -16,7 +16,7 @@ import { logger } from './logger.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const PORT = process.env.PORT || 3001
-const HOST = process.env.HOST || '127.0.0.1'
+const HOST = process.env.HOST || '0.0.0.0'
 
 // Resolve DB_PATH relative to the project root so relative paths in .env work correctly
 const DB_PATH = path.resolve(PROJECT_ROOT, process.env.DB_PATH || 'cronpilot.db')
@@ -43,7 +43,7 @@ if (fs.existsSync(path.join(clientDist, 'index.html'))) {
 }
 
 app.listen(PORT, HOST, () => {
-  logger.info(`CronPilot server running on http://localhost:${PORT}`)
+  logger.info(`CronPilot server running on http://${HOST}:${PORT}`)
 })
 
 function shutdown() {
