@@ -50,7 +50,7 @@ COPY package.json ./
 RUN mkdir -p /data
 
 ENV NODE_ENV=production \
-    PORT=3001 \
+    PORT=80 \
     HOST=0.0.0.0 \
     DB_PATH=/data/cronpilot.db
 
