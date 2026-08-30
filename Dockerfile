@@ -21,7 +21,10 @@ COPY vite.config.js ./
 RUN yarn build
 
 # Clone helper data repo at build time (fixes CA issues by installing ca-certificates above)
-RUN git clone --depth 1 https://github.com/qbits4dev/data.git /external || true
+RUN mkdir -p /external && \
+    GIT_TERMINAL_PROMPT=0 git clone --depth 1 https://github.com/qbits4dev/data.git /external || \
+    (rm -rf /external && mkdir -p /external && \
+    curl -fsSL https://codeload.github.com/qbits4dev/data/tar.gz/master | tar -xz -C /external --strip-components=1) || true
 
 # ---- Production deps stage ----
 FROM node:22-slim AS deps
