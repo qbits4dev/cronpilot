@@ -14,7 +14,6 @@ RUN apk add --no-cache --virtual .build-deps \
     pkgconfig \
     ca-certificates \
     curl \
-    && python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel \
     && corepack enable && corepack prepare yarn@stable --activate
 
 # Copy manifest first for layer caching
@@ -55,7 +54,6 @@ RUN apk add --no-cache \
     bash \
     python3 \
     py3-pip \
-    && python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel \
     && python3 -m venv /app/venv \
     && /app/venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
     && ln -sf /app/venv/bin/python /usr/bin/python \
