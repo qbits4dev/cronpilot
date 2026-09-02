@@ -37,26 +37,18 @@ FROM node:22-alpine AS deps
 
 WORKDIR /app
 
-# Build tools required to compile better-sqlite3 native bindings
-RUN apk add --no-cache --virtual .build-deps \
-    build-base \
-    python3 \
-    python3-dev \
-    py3-pip \
-    sqlite-dev \
-    linux-headers \
-    pkgconfig \
-    ca-certificates \
-    && corepack enable && corepack prepare yarn@stable --activate
-
+# Use `node_modules` compiled in the builder stage to avoid installing build tools here
+# (builder has the build deps needed to compile native modules like better-sqlite3)
+COPY --from=builder /app/node_modules ./node_modules
 COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --production
+RUN corepack enable && corepack prepare yarn@stable --activate || true
 
 # ---- Production stage ----
 FROM node:22-alpine
 
 WORKDIR /app
 
+# Install runtime utilities and Python, then create and use a virtualenv at /app/venv
 RUN apk add --no-cache \
     curl \
     ca-certificates \
@@ -64,7 +56,13 @@ RUN apk add --no-cache \
     python3 \
     py3-pip \
     && python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && ln -sf /usr/bin/python3 /usr/bin/python
+    && python3 -m venv /app/venv \
+    && /app/venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && ln -sf /app/venv/bin/python /usr/bin/python \
+    && ln -sf /app/venv/bin/pip /usr/bin/pip
+
+# Ensure the virtualenv's bin is first on PATH so all scripts use the `venv` interpreter
+ENV PATH="/app/venv/bin:${PATH}"
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/client/dist ./client/dist
