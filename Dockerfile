@@ -14,7 +14,7 @@ RUN apk add --no-cache --virtual .build-deps \
     pkgconfig \
     ca-certificates \
     curl \
-    && corepack enable && corepack prepare yarn@stable --activate
+    && corepack enable && corepack prepare yarn@1.22.19 --activate
 
 # Copy manifest first for layer caching
 COPY package.json yarn.lock ./
@@ -40,7 +40,7 @@ WORKDIR /app
 # (builder has the build deps needed to compile native modules like better-sqlite3)
 COPY --from=builder /app/node_modules ./node_modules
 COPY package.json yarn.lock ./
-RUN corepack enable && corepack prepare yarn@stable --activate || true
+RUN corepack enable && corepack prepare yarn@1.22.19 --activate || true
 
 # ---- Production stage ----
 FROM node:22-alpine
