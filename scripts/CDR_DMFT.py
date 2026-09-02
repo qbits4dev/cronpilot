@@ -64,8 +64,13 @@ def build_call_records_url(page: int = 1) -> str:
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
 
+    # Use environment overrides if provided; otherwise use today's start/end.
     start_date = CONFIG.from_date or _format_datetime(today_start)
     end_date = CONFIG.to_date or _format_datetime(today_end)
+
+    # Ensure CONFIG values are the actual strings used (keeps them consistent).
+    CONFIG.from_date = start_date
+    CONFIG.to_date = end_date
     print(
         f"Building call records URL with start_date={start_date} and end_date={end_date}"
     )
@@ -199,9 +204,11 @@ def main() -> None:
     if not dmft_numbers:
         print("No DMFT-pressed numbers found.")
         return
+    count = len(dmft_numbers)
     message = (
-        f"Date: {CONFIG.from_date} to {CONFIG.to_date}\nDMFT pressed numbers:\n"
-        + "\n".join(dmft_numbers)
+        f"Date: {CONFIG.from_date} to {CONFIG.to_date}\n"
+        f"Count: {count}\n"
+        "DMFT pressed numbers:\n" + "\n".join(dmft_numbers)
     )
     send_telegram_message(message)
     print(
