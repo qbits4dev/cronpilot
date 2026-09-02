@@ -59,6 +59,8 @@ RUN apk add --no-cache \
     && ln -sf /app/venv/bin/python /usr/bin/python \
     && ln -sf /app/venv/bin/pip /usr/bin/pip
 
+RUN pip install --no-cache-dir -r requirements.txt
+
 # Ensure the virtualenv's bin is first on PATH so all scripts use the `venv` interpreter
 ENV PATH="/app/venv/bin:${PATH}"
 
@@ -67,7 +69,7 @@ COPY --from=builder /app/client/dist ./client/dist
 COPY --from=builder /external ./external
 COPY server/src ./server/src
 COPY scripts ./scripts
-COPY package.json ./
+COPY package.json requirements.txt ./
 
 RUN mkdir -p /data
 
