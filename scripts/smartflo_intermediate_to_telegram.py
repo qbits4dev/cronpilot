@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Fetch Smartflo call records and send non-excluded DTMF entries to Telegram."""
+"""Fetch Smartflo call records and print DMFT-9 numbers from the CDR dataset."""
 
-import csv
 import json
 import os
-import socket
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+import re
+from datetime import datetime, timezone
+from typing import Any, Dict, List
 from urllib import error, parse, request
 
 
@@ -15,55 +14,48 @@ class Config:
         self.base_url = os.getenv(
             "SMARTFLO_BASE_URL", "https://api-smartflo.tatateleservices.com"
         )
-        self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "5550741389")
         self.request_timeout_seconds = int(
             os.getenv("SMARTFLO_REQUEST_TIMEOUT_SECONDS", "180")
         )
         self.max_retries = int(os.getenv("SMARTFLO_MAX_RETRIES", "3"))
-        self.leads_page_size = os.getenv("SMARTFLO_LEADS_PAGE_SIZE", "4")
-        self.broadcast_id = os.getenv("SMARTFLO_BROADCAST_ID", "")
-        self.smartflo_api_token = os.getenv(
-            "SMARTFLO_API_TOKEN",
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4MDY4NzIiLCJjciI6ZmFsc2UsImlzcyI6Imh0dHA6Ly9jbG91ZHBob25lLnRhdGF0ZWxlc2VydmljZXMuY29tL2Nvbm5lY3QvYXBpL3YxL2FwaS10b2tlbiIsImlhdCI6MTc4NzkxMTE3OSwibmJmIjoxNzg3OTExMTc5LCJleHAiOjE3OTU2ODcxNzksImp0aSI6IndOWDNoaE1icEgxQ0ZpQlAifQ.z01zDB0wEiF8Bzyh7rWAm1qF563hGuFc94yTMgewM54",
-        )
-        self.telegram_bot_token = os.getenv(
-            "TELEGRAM_BOT_TOKEN", "8139116469:AAHtKDSAjB6c0au7HnyJ62xgII5UWuLe1sg"
-        )
+        self.page_size = int(os.getenv("SMARTFLO_CALL_RECORDS_PAGE_SIZE", "100"))
+        self.from_date = os.getenv("SMARTFLO_FROM_DATE", "")
+        self.to_date = os.getenv("SMARTFLO_TO_DATE", "")
+        self.broadcast_id = os.getenv("SMARTFLO_BROADCAST_ID", "170861")
+        self.dnd_list_id = os.getenv("SMARTFLO_DND_LIST_ID", "4394")
 
 
 CONFIG = Config()
 
 
-def normalize_bool_value(value: Any) -> Optional[bool]:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if value is None:
-        return None
-
-    text = str(value).strip().lower()
-    if text in {"true", "yes", "y", "1", "on"}:
-        return True
-    if text in {"false", "no", "n", "0", "off", ""}:
-        return False
-    return None
+def _get_api_token() -> str:
+    for key in ("SMARTFLO_API_TOKEN", "SMARTFLO_TOKEN", "API_TOKEN"):
+        value = os.getenv(key, "").strip()
+        if value:
+            return value
+    return ""
 
 
-def call_api(method: str, url: str, payload: Optional[Dict[str, Any]] = None) -> Any:
-    if not CONFIG.smartflo_api_token:
+def _format_datetime(value: datetime) -> str:
+    return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def call_api(method: str, url: str, payload: Dict[str, Any] | None = None) -> Any:
+    """Call the Smartflo API with the configured bearer token."""
+    token = _get_api_token()
+    if not token:
         raise RuntimeError(
-            "SMARTFLO_API_TOKEN is not set. Export it before running this script."
+            "SMARTFLO_API_TOKEN is not set in the environment. Export it before running this script."
         )
 
     headers = {
-        "Authorization": f"Bearer {CONFIG.smartflo_api_token}",
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     req = request.Request(url, data=data, headers=headers, method=method)
 
-    last_error: Optional[Exception] = None
+    last_error: Any = None
     for attempt in range(1, CONFIG.max_retries + 1):
         try:
             with request.urlopen(
@@ -77,17 +69,11 @@ def call_api(method: str, url: str, payload: Optional[Dict[str, Any]] = None) ->
                 exc.code in {408, 429, 500, 502, 503, 504}
                 and attempt < CONFIG.max_retries
             ):
-                print(
-                    f"Smartflo request failed with HTTP {exc.code}; retrying ({attempt}/{CONFIG.max_retries})..."
-                )
                 continue
             raise RuntimeError(f"HTTP {exc.code}: {text}") from exc
-        except (error.URLError, TimeoutError, socket.timeout) as exc:
+        except (error.URLError, TimeoutError, OSError) as exc:
             last_error = exc
             if attempt < CONFIG.max_retries:
-                print(
-                    f"Smartflo request timed out; retrying ({attempt}/{CONFIG.max_retries})..."
-                )
                 continue
             raise RuntimeError(
                 f"Request failed after {CONFIG.max_retries} attempts: {exc}"
@@ -102,122 +88,173 @@ def call_api(method: str, url: str, payload: Optional[Dict[str, Any]] = None) ->
     raise RuntimeError("Request failed without a captured error")
 
 
-def build_call_records_url() -> str:
-    end_date = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    start_date = (datetime.now(timezone.utc) - timedelta(days=1)).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+def build_call_records_url(page: int = 1) -> str:
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    start_date = CONFIG.from_date or _format_datetime(today_start)
+    end_date = CONFIG.to_date or _format_datetime(today_end)
+    CONFIG.from_date = start_date
+    CONFIG.to_date = end_date
+
     params = [
         f"from_date={parse.quote(start_date)}",
         f"to_date={parse.quote(end_date)}",
-        f"limit={CONFIG.leads_page_size}",
-        "broadcast=true",
-        "page=1",
+        f"limit={CONFIG.page_size}",
+        f"page={page}",
+        f"broadcast={parse.quote(CONFIG.broadcast_id)}",
     ]
-    if CONFIG.broadcast_id:
-        params.append(f"broadcast_id={parse.quote(CONFIG.broadcast_id)}")
     return f"{CONFIG.base_url}/v1/call/records?{'&'.join(params)}"
 
 
-def extract_dtmf_records(payload: Any) -> List[Dict[str, Any]]:
-    if isinstance(payload, dict):
-        results = payload.get("results")
-        if isinstance(results, list):
-            return [
-                item
-                for item in results
-                if isinstance(item, dict)
-                and str(item.get("dtmf_input") or "").strip()
-                and str(item.get("dtmf_input") or "").strip() != "9"
-            ]
+def fetch_call_records() -> List[Dict[str, Any]]:
+    token = _get_api_token()
+    if not token:
+        raise RuntimeError(
+            "SMARTFLO_API_TOKEN is not set in the environment. Export it before running this script."
+        )
 
-    return []
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    records: List[Dict[str, Any]] = []
+    page = 1
+
+    while True:
+        url = build_call_records_url(page)
+        req = request.Request(url, headers=headers, method="GET")
+
+        for attempt in range(1, CONFIG.max_retries + 1):
+            try:
+                with request.urlopen(
+                    req, timeout=CONFIG.request_timeout_seconds
+                ) as response:
+                    body = response.read().decode("utf-8", errors="ignore")
+                    payload = json.loads(body) if body else {}
+                    results = payload.get("results", [])
+                    if not isinstance(results, list):
+                        return records
+
+                    page_records = [item for item in results if isinstance(item, dict)]
+                    if not page_records:
+                        return records
+
+                    records.extend(page_records)
+                    if len(page_records) < CONFIG.page_size:
+                        return records
+                    page += 1
+                    break
+            except error.HTTPError as exc:
+                text = exc.read().decode("utf-8", errors="ignore")
+                if (
+                    exc.code in {408, 429, 500, 502, 503, 504}
+                    and attempt < CONFIG.max_retries
+                ):
+                    continue
+                raise RuntimeError(f"HTTP {exc.code}: {text}") from exc
+            except (error.URLError, TimeoutError, OSError) as exc:
+                if attempt < CONFIG.max_retries:
+                    continue
+                raise RuntimeError(
+                    f"Request failed after {CONFIG.max_retries} attempts: {exc}"
+                ) from exc
+
+    raise RuntimeError("Request failed without a captured error")
 
 
-def write_records_to_csv(records: List[Dict[str, Any]], output_path: str) -> None:
-    if not records:
-        with open(output_path, "w", newline="", encoding="utf-8") as handle:
-            handle.write("")
-        return
-
-    flattened_records: List[Dict[str, Any]] = []
+def extract_dmft_numbers(
+    records: List[Dict[str, Any]], dmft_key: str = "9"
+) -> List[str]:
+    """Return the phone numbers associated with a specific DTMF key from CDR records."""
+    numbers: List[str] = []
     for record in records:
-        flattened: Dict[str, Any] = {}
-        for key, value in record.items():
-            if isinstance(value, (dict, list)):
-                flattened[key] = json.dumps(value, ensure_ascii=False)
-            else:
-                flattened[key] = value
-        flattened_records.append(flattened)
+        dtmf_input = str(record.get("dtmf_input") or "").strip()
+        if dtmf_input != dmft_key:
+            continue
 
-    fieldnames = sorted({key for record in flattened_records for key in record.keys()})
+        client_number = str(record.get("client_number") or "").strip()
+        contact_details = record.get("contact_details") or {}
+        field_0 = ""
+        if isinstance(contact_details, dict):
+            field_0 = str(contact_details.get("field_0") or "").strip()
 
-    with open(output_path, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(flattened_records)
+        if client_number:
+            numbers.append(client_number)
+        elif field_0:
+            numbers.append(field_0)
+
+    return numbers
 
 
-def send_telegram_message(bot_token: str, chat_id: str, text: str) -> None:
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = json.dumps(
-        {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
-    ).encode("utf-8")
-    req = request.Request(
-        url, data=payload, headers={"Content-Type": "application/json"}, method="POST"
-    )
-    try:
-        with request.urlopen(req, timeout=60) as response:
-            body = response.read().decode("utf-8", errors="ignore")
-            result = json.loads(body) if body else {}
-    except error.HTTPError as exc:
-        text_body = exc.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"Telegram API error: {exc.code}: {text_body}") from exc
-    except error.URLError as exc:
-        raise RuntimeError(f"Telegram request failed: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Invalid JSON from Telegram API: {body}") from exc
+def fetch_dnd_numbers(list_id: str) -> List[str]:
+    """Fetch all numbers already in a Smartflo DND list to avoid duplicate inserts."""
+    url = f"{CONFIG.base_url}/v1/broadcast/dnd/leads?list_id={parse.quote(str(list_id))}&limit=100"
+    payload = call_api("GET", url)
+    data = payload.get("data", []) if isinstance(payload, dict) else []
+    numbers: List[str] = []
+    for item in data:
+        if isinstance(item, dict):
+            number = str(item.get("number") or "").strip()
+            if number:
+                numbers.append(number)
+    return numbers
 
-    if not result.get("ok", False):
-        raise RuntimeError(f"Telegram send failed: {result}")
+
+def add_dnd_number(number: str, list_id: str) -> None:
+    """Add a single number to the configured Smartflo account DND list."""
+    url = f"{CONFIG.base_url}/v1/broadcast/dnd/lead"
+    body: Dict[str, Any] = {"number": number, "type": "number"}
+    if list_id:
+        body["list_id"] = list_id
+    response = call_api("POST", url, body)
+    if isinstance(response, dict) and response.get("success") is False:
+        raise RuntimeError(f"Failed to add {number} to DND list {list_id}: {response}")
+
+
+def sync_dmft_numbers_to_dnd_list(dmft_numbers: List[str], list_id: str) -> List[str]:
+    """Add new DMFT-9 numbers to the target account DND list and return the inserted numbers."""
+    existing = set(fetch_dnd_numbers(list_id))
+    inserted: List[str] = []
+    for number in dmft_numbers:
+        normalized = str(number).strip()
+        if not normalized or normalized in existing:
+            continue
+        add_dnd_number(normalized, list_id)
+        inserted.append(normalized)
+        existing.add(normalized)
+    return inserted
 
 
 def main() -> None:
-    chat_id = CONFIG.telegram_chat_id
+    records = fetch_call_records()
+    dmft_numbers = extract_dmft_numbers(records, dmft_key="9")
+    unique_numbers = []
+    seen = set()
+    for number in dmft_numbers:
+        normalized = str(number).strip()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            unique_numbers.append(normalized)
 
-    if not CONFIG.telegram_bot_token:
-        raise RuntimeError(
-            "TELEGRAM_BOT_TOKEN is not set. Export it before running this script."
-        )
-
-    records_response = call_api("GET", build_call_records_url())
-    dtmf_records = extract_dtmf_records(records_response)
-    if not dtmf_records:
-        print("No call records with dtmf_input were found.")
+    if not unique_numbers:
+        print("No DMFT-9 pressed numbers found.")
         return
 
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    message_lines = [
-        f"Date: {ts}",
-        f"Found {len(dtmf_records)} call records with dtmf_input:",
-    ]
-    for record in dtmf_records:
-        client_number = (
-            record.get("client_number")
-            or record.get("contact_details", {}).get("field_0")
-            or ""
-        )
-        dtmf_input = record.get("dtmf_input") or ""
-        message_lines.append(f"- {client_number or 'Unknown'}: {dtmf_input}")
+    print(f"Date: {CONFIG.from_date} to {CONFIG.to_date}")
+    print(f"Count: {len(unique_numbers)}")
+    print("DMFT 9 pressed numbers:")
+    for number in unique_numbers:
+        print(number)
 
-    message = "\n".join(message_lines)
-    output_path = os.path.join(
-        os.path.dirname(__file__), "..", "call_records_output.csv"
-    )
-    write_records_to_csv(dtmf_records, output_path)
-    send_telegram_message(CONFIG.telegram_bot_token, chat_id, message)
-    print(f"Sent {len(dtmf_records)} records to Telegram chat {chat_id}")
-    print(f"Saved {len(dtmf_records)} records to {output_path}")
+    inserted = sync_dmft_numbers_to_dnd_list(unique_numbers, CONFIG.dnd_list_id)
+    if inserted:
+        print(f"Added {len(inserted)} new numbers to DND list {CONFIG.dnd_list_id}")
+    else:
+        print(
+            f"No new numbers were added; DND list {CONFIG.dnd_list_id} already contains these entries."
+        )
 
 
 if __name__ == "__main__":
