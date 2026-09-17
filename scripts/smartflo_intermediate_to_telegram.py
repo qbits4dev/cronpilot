@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch Smartflo leads from the intermediate lead list, filter by dmft_press=true,
-and send the matching leads to a Telegram group."""
+"""Fetch Smartflo call records and send non-excluded DTMF entries to Telegram."""
 
 import csv
 import json
@@ -127,7 +126,9 @@ def extract_dtmf_records(payload: Any) -> List[Dict[str, Any]]:
             return [
                 item
                 for item in results
-                if isinstance(item, dict) and str(item.get("dtmf_input") or "").strip()
+                if isinstance(item, dict)
+                and str(item.get("dtmf_input") or "").strip()
+                and str(item.get("dtmf_input") or "").strip() != "9"
             ]
 
     return []
