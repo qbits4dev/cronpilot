@@ -19,8 +19,8 @@ class Config:
         )
         self.max_retries = int(os.getenv("SMARTFLO_MAX_RETRIES", "3"))
         self.page_size = int(os.getenv("SMARTFLO_CALL_RECORDS_PAGE_SIZE", "100"))
-        self.from_date = os.getenv("SMARTFLO_FROM_DATE", "")
-        self.to_date = os.getenv("SMARTFLO_TO_DATE", "")
+        self.from_date = os.getenv("SMARTFLO_FROM_DATE", "2026-09-16 00:00:00")
+        self.to_date = os.getenv("SMARTFLO_TO_DATE", "2026-09-16 23:59:59")
         self.broadcast_id = os.getenv("SMARTFLO_BROADCAST_ID", "170861")
         self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "-1003983572640")
         self.telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -141,10 +141,11 @@ def fetch_call_records() -> List[Dict[str, Any]]:
 
 
 def extract_dmft_numbers(records: List[Dict[str, Any]]) -> List[str]:
+    """Return only numbers from call records where the DTMF key pressed was 1."""
     numbers: List[str] = []
     for record in records:
         dtmf_input = str(record.get("dtmf_input") or "").strip()
-        if not dtmf_input:
+        if dtmf_input != "1":
             continue
 
         mobile_number = None
@@ -160,10 +161,7 @@ def extract_dmft_numbers(records: List[Dict[str, Any]]) -> List[str]:
 
         if mobile_number:
             numbers.append(mobile_number)
-            continue
 
-        if dtmf_input.isdigit() and len(dtmf_input) >= 1:
-            numbers.append(dtmf_input)
     return numbers
 
 
