@@ -104,7 +104,7 @@ def call_api(method: str, url: str, payload: Optional[Dict[str, Any]] = None) ->
 
 def build_call_records_url() -> str:
     end_date = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    start_date = (datetime.now(timezone.utc) - timedelta(days=7)).strftime(
+    start_date = (datetime.now(timezone.utc) - timedelta(days=1)).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
     params = [
