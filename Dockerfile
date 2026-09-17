@@ -75,7 +75,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 ENV NODE_ENV=production \
     PORT=80 \
     HOST=0.0.0.0 \
-    DB_PATH=/data/cronpilot.db
+    DB_PATH=/datadb/cronpilot.db
 
 EXPOSE 80
 VOLUME /data
