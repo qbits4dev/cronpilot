@@ -207,6 +207,7 @@ def main() -> None:
     count = len(dmft_numbers)
     message = (
         f"Date: {CONFIG.from_date} to {CONFIG.to_date}\n"
+        f"Total calls: {len(records)}\n"
         f"Count: {count}\n"
         "DMFT pressed numbers:\n" + "\n".join(dmft_numbers)
     )

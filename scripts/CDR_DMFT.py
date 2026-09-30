@@ -206,6 +206,7 @@ def main() -> None:
     message = (
         f"Date: {CONFIG.from_date} to {CONFIG.to_date}\n"
         f"Count: {count}\n"
+        f"Total calls: {len(records)}\n"
         "DMFT pressed numbers:\n" + "\n".join(dmft_numbers)
     )
     send_telegram_message(message)
